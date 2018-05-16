@@ -136,11 +136,12 @@ sumElements = domWit @(H.Container H.Vector) @d //
     _ `SCons` _ `SCons` _ `SCons` _ -> dimErr "sumElements"
 
 mapT
-    :: forall d ns. (SingI d, SingI ns)
-    => (Scalar d -> Scalar d)
+    :: forall d e ns. (SingI d, SingI e, SingI ns)
+    => (Scalar d -> Scalar e)
     -> Tensor d ns
-    -> Tensor d ns
+    -> Tensor e ns
 mapT f = domWit @(H.Container H.Vector) @d //
+         domWit @H.Element              @e //
          domWit @Num                    @d // case sing @_ @ns of
     SNil -> coerce f
     SNat `SCons` SNil -> coerce $
@@ -150,13 +151,16 @@ mapT f = domWit @(H.Container H.Vector) @d //
     _ `SCons` _ `SCons` _ `SCons` _ -> dimErr "mapT"
 
 zipT
-    :: forall d ns. (SingI d, SingI ns)
-    => (Scalar d -> Scalar d -> Scalar d)
+    :: forall d e f ns. (SingI d, SingI e, SingI f, SingI ns)
+    => (Scalar d -> Scalar e -> Scalar f)
     -> Tensor d ns
-    -> Tensor d ns
-    -> Tensor d ns
+    -> Tensor e ns
+    -> Tensor f ns
 zipT f = domWit @VS.Storable @d //
-         domWit @H.Element @d   // case sing @_ @ns of
+         domWit @VS.Storable @e //
+         domWit @H.Element   @e //
+         domWit @VS.Storable @f //
+         domWit @H.Element   @d // case sing @_ @ns of
     SNil -> coerce f
     SNat `SCons` SNil -> coerce $ VS.zipWith f
     SNat `SCons` sm@SNat `SCons` SNil -> \(T_ x) (T_ y) ->
@@ -360,10 +364,11 @@ syrk
     -> Tensor d '[m, m]  -- ^ α A A' + β C
 syrk α a βc = gemm α a (transp a) βc
 
+domWit :: forall c d. (SingI d, c Double, c (Complex Double)) => Wit1 c (Scalar d)
+domWit = case sing @_ @d of
+    SR -> Wit1
+    SC -> Wit1
+
 dimErr :: String -> a
 dimErr s = errorWithoutStackTrace $ "Tensor.HMatrix." ++ s ++ ": Unsupported dimensions"
 
-domWit :: forall c d. (SingI d, c Double, c (Complex Double)) => Wit1 c (Scalar d)
-domWit = case sing @_ @d of
-           SR -> Wit1
-           SC -> Wit1

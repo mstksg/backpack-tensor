@@ -77,17 +77,17 @@ sumElements
     -> Scalar d
 
 mapT
-    :: (SingI d, SingI ns)
+    :: (SingI d, SingI e, SingI ns)
     => (Scalar d -> Scalar e)
     -> Tensor d ns
     -> Tensor e ns
 
 zipT
-    :: (SingI d, SingI ns)
-    => (Scalar d -> Scalar d -> Scalar d)
+    :: (SingI d, SingI e, SingI f, SingI ns)
+    => (Scalar d -> Scalar e -> Scalar f)
     -> Tensor d ns
-    -> Tensor d ns
-    -> Tensor d ns
+    -> Tensor e ns
+    -> Tensor f ns
 
 index
     :: (SingI d, SingI ns)

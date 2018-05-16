@@ -1,4 +1,5 @@
 packages:
     tensor-sig
     tensor-hmatrix
+    tensor-vector
 allow-newer: base
