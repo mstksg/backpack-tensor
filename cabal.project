@@ -1,0 +1,3 @@
+packages:
+    tensor-sig
+allow-newer: base

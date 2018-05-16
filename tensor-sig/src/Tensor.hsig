@@ -1,0 +1,102 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeInType          #-}
+{-# LANGUAGE TypeOperators       #-}
+
+signature Tensor (
+    Tensor, Scalar
+  , Vec, Mat
+  , genA, gen, konst, sumElements
+  , map, zip, zipN
+  , index, select
+  , reshape
+  , load, store
+  ) where
+
+import           Data.Finite
+import           Data.Kind
+import           Data.Singletons
+import           Data.Type.Product hiding   (index, select)
+import           GHC.TypeNats
+import           Tensor.Core
+import           Type.Family.List
+import qualified Data.Type.Vector           as V
+import qualified Data.Vector.Storable.Sized as SVS
+import qualified Prelude                    as P
+
+data Tensor :: [Nat] -> Type
+data Scalar :: Type
+
+type Vec n   = Tensor '[n]
+type Mat m n = Tensor '[m, n]
+
+genA
+    :: P.Applicative f
+    => Sing ns
+    -> (Prod Finite ns -> f Scalar)
+    -> f (Tensor ns)
+
+gen :: Sing ns
+    -> (Prod Finite ns -> Scalar)
+    -> Tensor ns
+
+konst
+    :: Sing ns
+    -> Scalar
+    -> Tensor ns
+
+sumElements
+    :: SingI ns
+    => Tensor ns
+    -> Scalar
+
+map :: SingI ns
+    => (Scalar -> Scalar)
+    -> Tensor ns
+    -> Tensor ns
+
+
+zip :: SingI ns
+    => (Scalar -> Scalar -> Scalar)
+    -> Tensor ns
+    -> Tensor ns
+    -> Tensor ns
+
+
+zipN
+    :: SingI ns
+    => (V.Vec n Scalar -> Scalar)
+    -> V.VecT n Tensor ns
+    -> Tensor ns
+
+index
+    :: SingI ns
+    => Prod Finite ns
+    -> Tensor ns
+    -> Scalar
+
+select
+    :: forall ns ms. SingI ns
+    => Prod Finite ns
+    -> Tensor (ns ++ ms)
+    -> Tensor ms
+
+reshape
+    :: (SingI ns, Product ns ~ Product ms)
+    => Sing ms
+    -> Tensor ns
+    -> Tensor ms
+
+load
+    :: Sing ns
+    -> SVS.Vector (Product ns) Scalar
+    -> Tensor ns
+
+store
+    :: SingI ns
+    => Tensor ns
+    -> SVS.Vector (Product ns) Scalar
+
