@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -7,25 +8,37 @@
 {-# LANGUAGE TypeOperators       #-}
 
 signature Tensor (
+  -- * Types
     Tensor, Scalar
   , Vec, Mat
+  -- * General manipulation
   , genA, gen, konst, sumElements
   , map, zip, zipN
   , index, select
   , reshape
   , load, store
+  -- * BLAS
+  , transp
+  -- ** Level 1
+  , scal, axpy, dot, norm2, asum, iamax
+  -- ** Level 2
+  , gemv, ger, syr
+  -- ** Level 3
+  , gemm, syrk
   ) where
 
 import           Data.Finite
 import           Data.Kind
 import           Data.Singletons
-import           Data.Type.Product hiding   (index, select)
+import           Data.Type.Product hiding  (index, select)
 import           GHC.TypeNats
+import           Prelude                   (Maybe(..))
 import           Tensor.Core
 import           Type.Family.List
-import qualified Data.Type.Vector           as V
-import qualified Data.Vector.Storable.Sized as SVS
-import qualified Prelude                    as P
+import qualified Data.Type.Vector          as V
+import qualified Data.Vector.Generic       as VG
+import qualified Data.Vector.Generic.Sized as SVG
+import qualified Prelude                   as P
 
 data Tensor :: [Nat] -> Type
 data Scalar :: Type
@@ -91,12 +104,89 @@ reshape
     -> Tensor ms
 
 load
-    :: Sing ns
-    -> SVS.Vector (Product ns) Scalar
+    :: VG.Vector v Scalar
+    => Sing ns
+    -> SVG.Vector v (Product ns) Scalar
     -> Tensor ns
 
 store
-    :: SingI ns
+    :: (SingI ns, VG.Vector v Scalar)
     => Tensor ns
-    -> SVS.Vector (Product ns) Scalar
+    -> SVG.Vector v (Product ns) Scalar
 
+transp
+    :: (KnownNat m, KnownNat n)
+    => Tensor '[m, n]
+    -> Tensor '[n, m]
+
+-- Level 1
+scal
+    :: KnownNat n
+    => Scalar     -- ^ α
+    -> Tensor '[n]    -- ^ x
+    -> Tensor '[n]    -- ^ α x
+
+axpy
+    :: KnownNat n
+    => Scalar     -- ^ α
+    -> Tensor '[n]    -- ^ x
+    -> Tensor '[n]    -- ^ y
+    -> Tensor '[n]    -- ^ α x + y
+
+dot :: KnownNat n
+    => Tensor '[n]    -- ^ x
+    -> Tensor '[n]    -- ^ y
+    -> Scalar     -- ^ x' y
+
+norm2
+    :: KnownNat n
+    => Tensor '[n]    -- ^ x
+    -> Scalar     -- ^ ||x||
+
+asum
+    :: KnownNat n
+    => Tensor '[n]    -- ^ x
+    -> Scalar     -- ^ sum_i |x_i|
+
+iamax
+    :: forall n. KnownNat n
+    => Tensor '[n + 1]    -- ^ x
+    -> Finite (n + 1)     -- ^ argmax_i |x_i|
+
+-- Level 2
+gemv
+    :: (KnownNat m, KnownNat n)
+    => Scalar     -- ^ α
+    -> Tensor '[m, n]  -- ^ A
+    -> Tensor '[n]    -- ^ x
+    -> Maybe (Scalar, Tensor '[m])    -- ^ β, y
+    -> Tensor '[m]    -- ^ α A x + β y
+
+ger :: (KnownNat m, KnownNat n)
+    => Scalar     -- ^ α
+    -> Tensor '[m]    -- ^ x
+    -> Tensor '[n]    -- ^ y
+    -> Maybe (Tensor '[m, n])  -- ^ A
+    -> Tensor '[m, n]  -- ^ α x y' + A
+
+syr :: KnownNat n
+    => Scalar           -- ^ α
+    -> Tensor '[n]             -- ^ x
+    -> Maybe (Tensor '[n, n])  -- ^ A
+    -> Tensor '[n, n]          -- ^ x x' + A
+
+-- Level 3
+gemm
+    :: (KnownNat m, KnownNat o, KnownNat n)
+    => Scalar     -- ^ α
+    -> Tensor '[m, o]  -- ^ A
+    -> Tensor '[o, n]  -- ^ B
+    -> Maybe (Scalar, Tensor '[m, n])  -- ^ β, C
+    -> Tensor '[m, n]  -- ^ α A B + β C
+
+syrk
+    :: (KnownNat m, KnownNat n)
+    => Scalar     -- ^ α
+    -> Tensor '[m, n]  -- ^ A
+    -> Maybe (Scalar, Tensor '[m, m])  -- ^ β, C
+    -> Tensor '[m, m]  -- ^ α A A' + β C

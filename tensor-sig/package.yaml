@@ -32,6 +32,7 @@ library:
   - type-combinators
   - finite-typelits
   - vector-sized
+  - vector
   signatures:
   - Tensor
   exposed-modules:
