@@ -33,6 +33,7 @@ library:
   - finite-typelits
   - vector-sized
   - vector
+  - deepseq
   signatures:
   - Tensor
   exposed-modules:

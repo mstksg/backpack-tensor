@@ -1,7 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeInType          #-}
@@ -9,11 +8,10 @@
 
 signature Tensor (
   -- * Types
-    Tensor, Scalar
-  -- , Vec, Mat
+    Tensor, Scalar, Dom(..)
   -- * General manipulation
   , genA, gen, konst, sumElements
-  , mapT, zipT, zipTN
+  , mapT, zipT
   , index, select
   , reshape
   , load, store
@@ -27,168 +25,169 @@ signature Tensor (
   , gemm, syrk
   ) where
 
--- import           Control.DeepSeq
+import           Control.DeepSeq
 import           Data.Finite
 import           Data.Kind
 import           Data.Singletons
-import           Data.Singletons.Prelude.Num
-import           Data.Type.Product hiding    (index, select)
+import           Data.Type.Product hiding  (index, select)
 import           GHC.TypeNats
-import           Prelude                     (Maybe(..))
 import           Tensor.Core
 import           Type.Family.List
-import qualified Data.Type.Vector            as V
-import qualified Data.Vector.Generic         as VG
-import qualified Data.Vector.Generic.Sized   as SVG
-import qualified Prelude                     as P
+import qualified Data.Vector.Generic       as VG
+import qualified Data.Vector.Generic.Sized as SVG
 
-data Tensor :: [Nat] -> Type
-data Scalar :: Type
+data Dom = R | C
 
-instance SingI ns => P.Show (Tensor ns)
-instance P.Show Scalar
+data Tensor :: Dom -> [Nat] -> Type
+data Scalar :: Dom -> Type
 
--- type Vec n   = Tensor '[n]
--- type Mat m n = Tensor '[m, n]
+instance SingI ns => Show (Tensor d ns)
+instance SingI ns => Num (Tensor d ns)
+instance NFData (Tensor d ns)
+
+instance Num (Scalar d)
+instance Show (Scalar d)
+instance NFData (Scalar d)
+
+instance SingKind Dom
+instance SingI 'R
+instance SingI 'C
+
 
 genA
-    :: P.Applicative f
+    :: (SingI d, Applicative f)
     => Sing ns
-    -> (Prod Finite ns -> f Scalar)
-    -> f (Tensor ns)
+    -> (Prod Finite ns -> f (Scalar d))
+    -> f (Tensor d ns)
 
-gen :: Sing ns
-    -> (Prod Finite ns -> Scalar)
-    -> Tensor ns
+gen :: SingI d
+    => Sing ns
+    -> (Prod Finite ns -> Scalar d)
+    -> Tensor d ns
 
 konst
-    :: Sing ns
-    -> Scalar
-    -> Tensor ns
+    :: SingI d
+    => Sing ns
+    -> Scalar d
+    -> Tensor d ns
 
 sumElements
-    :: SingI ns
-    => Tensor ns
-    -> Scalar
+    :: (SingI d, SingI ns)
+    => Tensor d ns
+    -> Scalar d
 
 mapT
-    :: SingI ns
-    => (Scalar -> Scalar)
-    -> Tensor ns
-    -> Tensor ns
+    :: (SingI d, SingI ns)
+    => (Scalar d -> Scalar e)
+    -> Tensor d ns
+    -> Tensor e ns
 
 zipT
-    :: SingI ns
-    => (Scalar -> Scalar -> Scalar)
-    -> Tensor ns
-    -> Tensor ns
-    -> Tensor ns
-
-zipTN
-    :: SingI ns
-    => (V.Vec n Scalar -> Scalar)
-    -> V.VecT n Tensor ns
-    -> Tensor ns
+    :: (SingI d, SingI ns)
+    => (Scalar d -> Scalar d -> Scalar d)
+    -> Tensor d ns
+    -> Tensor d ns
+    -> Tensor d ns
 
 index
-    :: SingI ns
+    :: (SingI d, SingI ns)
     => Prod Finite ns
-    -> Tensor ns
-    -> Scalar
+    -> Tensor d ns
+    -> Scalar d
 
 select
-    :: forall ns ms. (SingI ns, SingI ms)
+    :: (SingI d, SingI ns, SingI ms)
     => Prod Finite ns
-    -> Tensor (ns ++ ms)
-    -> Tensor ms
+    -> Tensor d (ns ++ ms)
+    -> Tensor d ms
 
 reshape
-    :: (SingI ns, Product ns ~ Product ms)
+    :: (SingI d, SingI ns, Product ns ~ Product ms)
     => Sing ms
-    -> Tensor ns
-    -> Tensor ms
+    -> Tensor d ns
+    -> Tensor d ms
 
 load
-    :: VG.Vector v Scalar
+    :: (SingI d, VG.Vector v (Scalar d))
     => Sing ns
-    -> SVG.Vector v (Product ns) Scalar
-    -> Tensor ns
+    -> SVG.Vector v (Product ns) (Scalar d)
+    -> Tensor d ns
 
 store
-    :: (SingI ns, VG.Vector v Scalar)
-    => Tensor ns
-    -> SVG.Vector v (Product ns) Scalar
+    :: (SingI d, SingI ns, VG.Vector v (Scalar d))
+    => Tensor d ns
+    -> SVG.Vector v (Product ns) (Scalar d)
 
 transp
-    :: (KnownNat m, KnownNat n)
-    => Tensor '[m, n]
-    -> Tensor '[n, m]
+    :: (SingI d, KnownNat m, KnownNat n)
+    => Tensor d '[m, n]
+    -> Tensor d '[n, m]
 
 scal
-    :: KnownNat n
-    => Scalar     -- ^ α
-    -> Tensor '[n]    -- ^ x
-    -> Tensor '[n]    -- ^ α x
+    :: (SingI d, KnownNat n)
+    => Scalar d     -- ^ α
+    -> Tensor d '[n]    -- ^ x
+    -> Tensor d '[n]    -- ^ α x
 
 axpy
-    :: KnownNat n
-    => Scalar     -- ^ α
-    -> Tensor '[n]    -- ^ x
-    -> Tensor '[n]    -- ^ y
-    -> Tensor '[n]    -- ^ α x + y
+    :: (SingI d, KnownNat n)
+    => Scalar d     -- ^ α
+    -> Tensor d '[n]    -- ^ x
+    -> Tensor d '[n]    -- ^ y
+    -> Tensor d '[n]    -- ^ α x + y
 
-dot :: KnownNat n
-    => Tensor '[n]    -- ^ x
-    -> Tensor '[n]    -- ^ y
-    -> Scalar     -- ^ x' y
+dot :: (SingI d, KnownNat n)
+    => Tensor d '[n]    -- ^ x
+    -> Tensor d '[n]    -- ^ y
+    -> Scalar d     -- ^ x' y
 
 norm2
-    :: KnownNat n
-    => Tensor '[n]    -- ^ x
-    -> Scalar     -- ^ ||x||
+    :: (SingI d, KnownNat n)
+    => Tensor d '[n]    -- ^ x
+    -> Scalar 'R     -- ^ ||x||
 
 asum
-    :: KnownNat n
-    => Tensor '[n]    -- ^ x
-    -> Scalar     -- ^ sum_i |x_i|
+    :: (SingI d, KnownNat n)
+    => Tensor d '[n]    -- ^ x
+    -> Scalar 'R     -- ^ sum_i |x_i|
 
 iamax
-    :: forall n. KnownNat n
-    => Tensor '[n + 1]    -- ^ x
+    :: (SingI d, KnownNat n)
+    => Tensor d '[n + 1]    -- ^ x
     -> Finite (n + 1)     -- ^ argmax_i |x_i|
 
 gemv
-    :: (KnownNat m, KnownNat n)
-    => Scalar     -- ^ α
-    -> Tensor '[m, n]  -- ^ A
-    -> Tensor '[n]    -- ^ x
-    -> Maybe (Scalar, Tensor '[m])    -- ^ β, y
-    -> Tensor '[m]    -- ^ α A x + β y
+    :: (SingI d, KnownNat m, KnownNat n)
+    => Scalar d     -- ^ α
+    -> Tensor d '[m, n]  -- ^ A
+    -> Tensor d '[n]    -- ^ x
+    -> Maybe (Scalar d, Tensor d '[m])    -- ^ β, y
+    -> Tensor d '[m]    -- ^ α A x + β y
 
-ger :: (KnownNat m, KnownNat n)
-    => Scalar     -- ^ α
-    -> Tensor '[m]    -- ^ x
-    -> Tensor '[n]    -- ^ y
-    -> Maybe (Tensor '[m, n])  -- ^ A
-    -> Tensor '[m, n]  -- ^ α x y' + A
+ger :: (SingI d, KnownNat m, KnownNat n)
+    => Scalar d     -- ^ α
+    -> Tensor d '[m]    -- ^ x
+    -> Tensor d '[n]    -- ^ y
+    -> Maybe (Tensor d '[m, n])  -- ^ A
+    -> Tensor d '[m, n]  -- ^ α x y' + A
 
-syr :: KnownNat n
-    => Scalar           -- ^ α
-    -> Tensor '[n]             -- ^ x
-    -> Maybe (Tensor '[n, n])  -- ^ A
-    -> Tensor '[n, n]          -- ^ x x' + A
+syr :: (SingI d, KnownNat n)
+    => Scalar d           -- ^ α
+    -> Tensor d '[n]             -- ^ x
+    -> Maybe (Tensor d '[n, n])  -- ^ A
+    -> Tensor d '[n, n]          -- ^ x x' + A
 
 gemm
-    :: (KnownNat m, KnownNat o, KnownNat n)
-    => Scalar     -- ^ α
-    -> Tensor '[m, o]  -- ^ A
-    -> Tensor '[o, n]  -- ^ B
-    -> Maybe (Scalar, Tensor '[m, n])  -- ^ β, C
-    -> Tensor '[m, n]  -- ^ α A B + β C
+    :: (SingI d, KnownNat m, KnownNat o, KnownNat n)
+    => Scalar d     -- ^ α
+    -> Tensor d '[m, o]  -- ^ A
+    -> Tensor d '[o, n]  -- ^ B
+    -> Maybe (Scalar d, Tensor d '[m, n])  -- ^ β, C
+    -> Tensor d '[m, n]  -- ^ α A B + β C
 
 syrk
-    :: (KnownNat m, KnownNat n)
-    => Scalar     -- ^ α
-    -> Tensor '[m, n]  -- ^ A
-    -> Maybe (Scalar, Tensor '[m, m])  -- ^ β, C
-    -> Tensor '[m, m]  -- ^ α A A' + β C
+    :: (SingI d, KnownNat m, KnownNat n)
+    => Scalar d     -- ^ α
+    -> Tensor d '[m, n]  -- ^ A
+    -> Maybe (Scalar d, Tensor d '[m, m])  -- ^ β, C
+    -> Tensor d '[m, m]  -- ^ α A A' + β C
