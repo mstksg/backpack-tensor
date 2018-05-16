@@ -10,10 +10,10 @@
 signature Tensor (
   -- * Types
     Tensor, Scalar
-  , Vec, Mat
+  -- , Vec, Mat
   -- * General manipulation
   , genA, gen, konst, sumElements
-  , map, zip, zipN
+  , mapT, zipT, zipTN
   , index, select
   , reshape
   , load, store
@@ -27,24 +27,29 @@ signature Tensor (
   , gemm, syrk
   ) where
 
+-- import           Control.DeepSeq
 import           Data.Finite
 import           Data.Kind
 import           Data.Singletons
-import           Data.Type.Product hiding  (index, select)
+import           Data.Singletons.Prelude.Num
+import           Data.Type.Product hiding    (index, select)
 import           GHC.TypeNats
-import           Prelude                   (Maybe(..))
+import           Prelude                     (Maybe(..))
 import           Tensor.Core
 import           Type.Family.List
-import qualified Data.Type.Vector          as V
-import qualified Data.Vector.Generic       as VG
-import qualified Data.Vector.Generic.Sized as SVG
-import qualified Prelude                   as P
+import qualified Data.Type.Vector            as V
+import qualified Data.Vector.Generic         as VG
+import qualified Data.Vector.Generic.Sized   as SVG
+import qualified Prelude                     as P
 
 data Tensor :: [Nat] -> Type
 data Scalar :: Type
 
-type Vec n   = Tensor '[n]
-type Mat m n = Tensor '[m, n]
+instance SingI ns => P.Show (Tensor ns)
+instance P.Show Scalar
+
+-- type Vec n   = Tensor '[n]
+-- type Mat m n = Tensor '[m, n]
 
 genA
     :: P.Applicative f
@@ -66,20 +71,20 @@ sumElements
     => Tensor ns
     -> Scalar
 
-map :: SingI ns
+mapT
+    :: SingI ns
     => (Scalar -> Scalar)
     -> Tensor ns
     -> Tensor ns
 
-
-zip :: SingI ns
+zipT
+    :: SingI ns
     => (Scalar -> Scalar -> Scalar)
     -> Tensor ns
     -> Tensor ns
     -> Tensor ns
 
-
-zipN
+zipTN
     :: SingI ns
     => (V.Vec n Scalar -> Scalar)
     -> V.VecT n Tensor ns
@@ -92,7 +97,7 @@ index
     -> Scalar
 
 select
-    :: forall ns ms. SingI ns
+    :: forall ns ms. (SingI ns, SingI ms)
     => Prod Finite ns
     -> Tensor (ns ++ ms)
     -> Tensor ms
@@ -119,7 +124,6 @@ transp
     => Tensor '[m, n]
     -> Tensor '[n, m]
 
--- Level 1
 scal
     :: KnownNat n
     => Scalar     -- ^ α
@@ -153,7 +157,6 @@ iamax
     => Tensor '[n + 1]    -- ^ x
     -> Finite (n + 1)     -- ^ argmax_i |x_i|
 
--- Level 2
 gemv
     :: (KnownNat m, KnownNat n)
     => Scalar     -- ^ α
@@ -175,7 +178,6 @@ syr :: KnownNat n
     -> Maybe (Tensor '[n, n])  -- ^ A
     -> Tensor '[n, n]          -- ^ x x' + A
 
--- Level 3
 gemm
     :: (KnownNat m, KnownNat o, KnownNat n)
     => Scalar     -- ^ α
