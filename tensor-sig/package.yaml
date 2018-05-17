@@ -35,6 +35,19 @@ library:
   - vector
   - deepseq
   signatures:
-  - Tensor
-  exposed-modules:
   - Tensor.Core
+
+executables:
+  tensor-tests-hmatrix:
+    main:                hmatrix.hs
+    source-dirs:         app
+    dependencies:
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - tensor-sig
+    - tensor-hmatrix
+    - type-combinators
+    - singletons

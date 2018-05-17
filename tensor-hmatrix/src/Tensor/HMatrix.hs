@@ -18,7 +18,7 @@
 
 module Tensor.HMatrix (
   -- * Types
-    Tensor(..), Scalar, Dom(..), RSym0, CSym0, SDom
+    Tensor(..), ScalarC, ScalarR, Scalar, Dom(..), RSym0, CSym0, SDom
   -- * General manipulation
   , genA, gen, konst, sumElements
   , mapT, zipT
@@ -59,9 +59,12 @@ $(singletons [d|
   data Dom = R | C
   |])
 
+type ScalarR = Double
+type ScalarC = Complex Double
+
 type family Scalar (d :: Dom) = (s :: Type) | s -> d where
-    Scalar 'R = Double
-    Scalar 'C = Complex Double
+    Scalar 'R = ScalarR
+    Scalar 'C = ScalarC
 
 -- TODO: support using nested vectors?
 type family Tensor' (d :: Dom) (ns :: [Nat]) :: Type where
@@ -366,8 +369,9 @@ syrk
     -> Tensor d '[m, n]  -- ^ A
     -> Maybe (Scalar d, Tensor d '[m, m])  -- ^ β, C
     -> Tensor d '[m, m]  -- ^ α A A' + β C
-syrk α a βc = gemm α a (transp a) βc
+syrk α a = gemm α a (transp a)
 
+-- | Can this be RULEs'd?
 domWit :: forall c d. (SingI d, c Double, c (Complex Double)) => Wit1 c (Scalar d)
 domWit = case sing @_ @d of
     SR -> Wit1

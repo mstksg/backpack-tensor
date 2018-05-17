@@ -27,7 +27,7 @@ ghc-options:
 
 library:
   source-dirs: src
-  reexported-modules: Tensor.HMatrix as Tensor
+  reexported-modules: Tensor.HMatrix as Tensor.Core
   dependencies:
   - hmatrix
   - singletons

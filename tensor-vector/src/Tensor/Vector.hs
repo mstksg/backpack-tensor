@@ -48,12 +48,10 @@ import           Data.Type.Product hiding           (select, index)
 import           GHC.TypeNats
 import           Type.Class.Witness
 import           Type.Family.List
-import qualified Data.Vector                        as V
 import qualified Data.Vector.Generic                as VG
 import qualified Data.Vector.Generic.Sized          as SVG
 import qualified Data.Vector.Generic.Sized.Internal as SVG
 import qualified Data.Vector.Storable               as VS
-import qualified Data.Vector.Storable.Sized         as SVS
 
 $(singletons [d|
   data Dom = R | C
@@ -325,14 +323,14 @@ chunkMat (T_ xs) = flip map [0..m-1] $ \i -> coerce (VS.slice (i * n) n xs)
     m :: Int
     m = fromIntegral . fromSing $ sing @_ @m
 
-
+-- | Can this be RULEs'd?
 syrk
     :: (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, n]  -- ^ A
     -> Maybe (Scalar d, Tensor d '[m, m])  -- ^ β, C
     -> Tensor d '[m, m]  -- ^ α A A' + β C
-syrk α a βc = gemm α a (transp a) βc
+syrk α a = gemm α a (transp a)
 
 domWit
     :: forall c d. (SingI d, c Double, c (Complex Double))

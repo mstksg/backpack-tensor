@@ -1,14 +1,16 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeInType          #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE TypeOperators          #-}
 
-signature Tensor (
+signature Tensor.Core (
   -- * Types
-    Tensor, Scalar, Dom(..)
+    Tensor, ScalarR, ScalarC, Scalar, Dom(..)
   -- * General manipulation
   , genA, gen, konst, sumElements
   , mapT, zipT
@@ -29,25 +31,32 @@ import           Control.DeepSeq
 import           Data.Finite
 import           Data.Kind
 import           Data.Singletons
-import           Data.Type.Product hiding  (index, select)
+import           Data.Singletons.Prelude.List
+import           Data.Type.Product hiding     (index, select)
 import           GHC.TypeNats
-import           Tensor.Core
 import           Type.Family.List
-import qualified Data.Vector.Generic       as VG
-import qualified Data.Vector.Generic.Sized as SVG
+import qualified Data.Vector.Generic          as VG
+import qualified Data.Vector.Generic.Sized    as SVG
 
 data Dom = R | C
 
 data Tensor :: Dom -> [Nat] -> Type
-data Scalar :: Dom -> Type
 
-instance SingI ns => Show (Tensor d ns)
-instance SingI ns => Num (Tensor d ns)
-instance NFData (Tensor d ns)
+data ScalarR
+data ScalarC
 
-instance Num (Scalar d)
-instance Show (Scalar d)
-instance NFData (Scalar d)
+type family Scalar (d :: Dom) = (s :: Type) | s -> d where
+    Scalar 'R = ScalarR
+    Scalar 'C = ScalarC
+
+-- instance SingI ns => Show (Tensor d ns)
+-- instance SingI ns => Num (Tensor d ns)
+-- instance NFData (Tensor d ns)
+
+-- instance Show (Scalar 'R)
+-- instance Show (Scalar 'C)
+-- instance Num (Scalar d)
+-- instance NFData (Scalar d)
 
 instance SingKind Dom
 instance SingI 'R
@@ -55,7 +64,7 @@ instance SingI 'C
 
 
 genA
-    :: (SingI d, Applicative f)
+    :: forall d ns f. (SingI d, Applicative f)
     => Sing ns
     -> (Prod Finite ns -> f (Scalar d))
     -> f (Tensor d ns)
@@ -108,13 +117,13 @@ reshape
     -> Tensor d ms
 
 load
-    :: (SingI d, VG.Vector v (Scalar d))
+    :: forall v d ns. (VG.Vector v (Scalar d), SingI d)
     => Sing ns
     -> SVG.Vector v (Product ns) (Scalar d)
     -> Tensor d ns
 
 store
-    :: (SingI d, SingI ns, VG.Vector v (Scalar d))
+    :: forall v d ns. (SingI d, SingI ns, VG.Vector v (Scalar d))
     => Tensor d ns
     -> SVG.Vector v (Product ns) (Scalar d)
 

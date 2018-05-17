@@ -27,7 +27,7 @@ ghc-options:
 
 library:
   source-dirs: src
-  reexported-modules: Tensor.Vector as Tensor
+  reexported-modules: Tensor.Vector as Tensor.Core
   dependencies:
   - singletons
   - type-combinators
