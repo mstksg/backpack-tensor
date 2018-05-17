@@ -63,11 +63,15 @@ type family Scalar (d :: Dom) = (s :: Type) | s -> d where
     Scalar 'R = Double
     Scalar 'C = Complex Double
 
+-- TODO: support using nested vectors?
 type family Tensor' (d :: Dom) (ns :: [Nat]) :: Type where
-    Tensor' d '[]        = Scalar d
-    Tensor' d '[n]       = H.Vector (Scalar d)
-    Tensor' d '[n,m]     = H.Matrix (Scalar d)
-    Tensor' d (n':m':ns) = TL.TypeError ('TL.Text "Unsupported dimension: " 'TL.:<>: 'TL.ShowType ns)
+    Tensor' d '[]    = Scalar d
+    Tensor' d '[n]   = H.Vector (Scalar d)
+    Tensor' d '[n,m] = H.Matrix (Scalar d)
+    Tensor' d (n ': m ': ns) = TL.TypeError
+               ( 'TL.Text "Unsupported tensor dimension: "
+        'TL.:<>: 'TL.ShowType (n ': m ': ns)
+               )
 
 newtype Tensor d ns = T_ { getT_ :: Tensor' d ns }
 
