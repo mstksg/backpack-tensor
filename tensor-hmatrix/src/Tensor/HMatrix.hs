@@ -25,14 +25,18 @@ module Tensor.HMatrix (
   , index, select
   , reshape
   , load, store
-  -- * BLAS
-  , transp
-  -- ** Level 1
-  , scal, axpy, dot, norm2, asum, iamax
-  -- ** Level 2
-  , gemv, ger, syr
-  -- ** Level 3
-  , gemm, syrk
+  -- * Basic Linear Algebra
+  , tr
+  , scale, addScale
+  , dot
+  , norm2
+  , asum
+  , iamax
+  , matVecScale
+  , outerScale
+  , xTxScale
+  , matMatScale
+  , mTmScale
   ) where
 
 import           Data.Coerce
@@ -262,29 +266,28 @@ store = domWit @VS.Storable @d //
         . H.flatten
     _ `SCons` _ `SCons` _ `SCons` _ -> dimErr "store"
 
-transp
-    :: forall d m n. (SingI d, KnownNat m, KnownNat n)
+tr  :: forall d m n. (SingI d, KnownNat m, KnownNat n)
     => Tensor d '[m, n]
     -> Tensor d '[n, m]
-transp = case sing @_ @d of
+tr = case sing @_ @d of
     SR -> coerce $ H.tr @(H.Matrix Double) @(H.Matrix Double)
     SC -> coerce $ H.tr @(H.Matrix (Complex Double)) @(H.Matrix (Complex Double))
 
-scal
+scale
     :: forall d n. (SingI d, KnownNat n)
     => Scalar d         -- ^ α
     -> Tensor d '[n]    -- ^ x
     -> Tensor d '[n]    -- ^ α x
-scal = domWit @(H.Container H.Vector) @d //
-        coerce (H.scale @(Scalar d) @H.Vector)
+scale = domWit @(H.Container H.Vector) @d //
+          coerce (H.scale @(Scalar d) @H.Vector)
 
-axpy
+addScale
     :: forall d n. (SingI d, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[n]    -- ^ x
     -> Tensor d '[n]    -- ^ y
     -> Tensor d '[n]    -- ^ α x + y
-axpy α (T_ x) (T_ y) = domWit @(H.Container H.Vector) @d //
+addScale α (T_ x) (T_ y) = domWit @(H.Container H.Vector) @d //
     T_ (H.scale α x `H.add` y)
 
 dot :: forall d n. (SingI d, KnownNat n)
@@ -319,57 +322,48 @@ iamax = domWit @(H.Container H.Vector) @d //
            . H.cmap abs
            )
 
-gemv
+matVecScale
     :: forall d m n. (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, n]  -- ^ A
     -> Tensor d '[n]    -- ^ x
-    -> Maybe (Scalar d, Tensor d '[m])    -- ^ β, y
-    -> Tensor d '[m]    -- ^ α A x + β y
-gemv α (T_ a) (T_ x) βy = domWit @(H.Container H.Vector) @d //
-                          domWit @H.Numeric              @d //
-    case βy of
-      Nothing        -> T_ $ H.scale α (a H.#> x)
-      Just (β, T_ y) -> T_ $ H.scale α (a H.#> x) `H.add` H.scale β y
+    -> Tensor d '[m]    -- ^ α A x
+matVecScale α (T_ a) (T_ x) = T_ $ H.scale α (a H.#> x)
+        \\ domWit @(H.Container H.Vector) @d
+        \\ domWit @H.Numeric              @d
 
-ger :: forall d m n. (SingI d, KnownNat m, KnownNat n)
+outerScale
+    :: forall d m n. (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m]    -- ^ x
     -> Tensor d '[n]    -- ^ y
-    -> Maybe (Tensor d '[m, n])  -- ^ A
     -> Tensor d '[m, n]  -- ^ α x y' + A
-ger α (T_ x) (T_ y) ma = domWit @(H.Container H.Vector) @d //
-                         domWit @H.Product              @d //
-    case ma of
-      Nothing     -> T_ $ H.scale α (x `H.outer` y)
-      Just (T_ a) -> T_ $ H.scale α (x `H.outer` y) `H.add` a
+outerScale α (T_ x) (T_ y) = T_ $ H.scale α (x `H.outer` y)
+        \\ domWit @(H.Container H.Vector) @d
+        \\ domWit @H.Product              @d
 
-syr :: (SingI d, KnownNat n)
+xTxScale
+    :: (SingI d, KnownNat n)
     => Scalar d           -- ^ α
     -> Tensor d '[n]             -- ^ x
-    -> Maybe (Tensor d '[n, n])  -- ^ A
     -> Tensor d '[n, n]          -- ^ x x' + A
-syr α x = ger α x x
+xTxScale α x = outerScale α x x
 
-gemm
+matMatScale
     :: forall d m o n. (SingI d, KnownNat m, KnownNat o, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, o]  -- ^ A
     -> Tensor d '[o, n]  -- ^ B
-    -> Maybe (Scalar d, Tensor d '[m, n])  -- ^ β, C
-    -> Tensor d '[m, n]  -- ^ α A B + β C
-gemm α (T_ a) (T_ b) βc = domWit @H.Numeric @d //
-    case βc of
-      Nothing        -> T_ $ H.scale α (a H.<> b)
-      Just (β, T_ c) -> T_ $ H.scale α (a H.<> b) `H.add` H.scale β c
+    -> Tensor d '[m, n]  -- ^ α A B
+matMatScale α (T_ a) (T_ b) = T_ $ H.scale α (a H.<> b)
+        \\ domWit @H.Numeric @d
 
-syrk
+mTmScale
     :: (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, n]  -- ^ A
-    -> Maybe (Scalar d, Tensor d '[m, m])  -- ^ β, C
     -> Tensor d '[m, m]  -- ^ α A A' + β C
-syrk α a = gemm α a (transp a)
+mTmScale α a = matMatScale α a (tr a)
 
 -- | Can this be RULEs'd?
 domWit :: forall c d. (SingI d, c Double, c (Complex Double)) => Wit1 c (Scalar d)

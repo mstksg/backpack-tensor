@@ -25,14 +25,18 @@ module Tensor.Vector (
   , index, select
   , reshape
   , load, store
-  -- * BLAS
-  , transp
-  -- ** Level 1
-  , scal, axpy, dot, norm2, asum, iamax
-  -- ** Level 2
-  , gemv, ger, syr
-  -- ** Level 3
-  , gemm, syrk
+  -- * Basic Linear Algebra
+  , tr
+  , scale, addScale
+  , dot
+  , norm2
+  , asum
+  , iamax
+  , matVecScale
+  , outerScale
+  , xTxScale
+  , matMatScale
+  , mTmScale
   ) where
 
 import           Data.Coerce
@@ -198,28 +202,28 @@ store
 store = coerce (VG.convert @VS.Vector @(Scalar d) @v)
     \\ domWit @VS.Storable @d
 
-transp
+tr
     :: (SingI d, KnownNat m, KnownNat n)
     => Tensor d '[m, n]
     -> Tensor d '[n, m]
-transp t = gen sing $ \(i :< j :< Ø) -> index (j :< i :< Ø) t
+tr t = gen sing $ \(i :< j :< Ø) -> index (j :< i :< Ø) t
 
-scal
+scale
     :: forall d n. (SingI d, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[n]    -- ^ x
     -> Tensor d '[n]    -- ^ α x
-scal α = coerce (VS.map (α *))
+scale α = coerce (VS.map (α *))
     \\ domWit @Num @d
     \\ domWit @VS.Storable @d
 
-axpy
+addScale
     :: forall d n. (SingI d, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[n]    -- ^ x
     -> Tensor d '[n]    -- ^ y
     -> Tensor d '[n]    -- ^ α x + y
-axpy α = coerce $ VS.zipWith @(Scalar d) (\x y -> α * x + y)
+addScale α = coerce $ VS.zipWith @(Scalar d) (\x y -> α * x + y)
                     \\ domWit @VS.Storable @d
                     \\ domWit @Num         @d
 
@@ -255,62 +259,43 @@ iamax (T_ xs) = Finite . fromIntegral @Int $ case sing @_ @d of
     SR -> VS.maxIndex (VS.map abs xs)
     SC -> VS.maxIndex (VS.map magnitude xs)
 
-gemv
+matVecScale
     :: forall d m n. (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, n]  -- ^ A
     -> Tensor d '[n]    -- ^ x
-    -> Maybe (Scalar d, Tensor d '[m])    -- ^ β, y
-    -> Tensor d '[m]    -- ^ α A x + β y
-gemv α as x βys = domWit @VS.Storable @d // domWit @Num @d // T_ $
-    case βys of
-      Nothing         -> VS.fromList $ map (\a -> α * (a `dot` x))
-                        (chunkMat as)
-      Just (β, T_ ys) -> VS.fromList $ zipWith (\a y -> α * β * y * (a `dot` x))
-                        (chunkMat as)
-                        (VS.toList ys)
+    -> Tensor d '[m]    -- ^ α A x
+matVecScale α as x = T_ $ VS.fromList ( map (\a -> α * (a `dot` x))
+                                            (chunkMat as)
+                                      )
+        \\ domWit @VS.Storable @d
+        \\ domWit @Num @d
 
-ger :: forall d m n. (SingI d, KnownNat m, KnownNat n)
+outerScale
+    :: forall d m n. (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m]    -- ^ x
     -> Tensor d '[n]    -- ^ y
-    -> Maybe (Tensor d '[m, n])  -- ^ A
     -> Tensor d '[m, n]  -- ^ α x y' + A
-ger α (T_ xs) (T_ ys) mas = domWit @VS.Storable @d // domWit @Num @d // T_ $
-    case mas of
-      Nothing -> VS.concat . flip map (VS.toList xs) $ \x ->
+outerScale α (T_ xs) (T_ ys) = domWit @VS.Storable @d // domWit @Num @d // T_ $
+      VS.concat . flip map (VS.toList xs) $ \x ->
         VS.map (\y -> α * x * y) ys
-      Just (T_ as) -> VS.concat $ zipWith (go as) [0..] (VS.toList xs)
-  where
-    go  :: (VS.Storable (Scalar d), Num (Scalar d))
-        => VS.Vector (Scalar d) -> Int -> Scalar d -> VS.Vector (Scalar d)
-    go as i x = VS.zipWith (\y a -> αx * y + a) ys (VS.slice (i * n) n as)
-      where
-        αx = α * x
-    n :: Int
-    n = fromIntegral . fromSing $ sing @_ @n
 
-syr :: (SingI d, KnownNat n)
+xTxScale
+    :: (SingI d, KnownNat n)
     => Scalar d           -- ^ α
     -> Tensor d '[n]             -- ^ x
-    -> Maybe (Tensor d '[n, n])  -- ^ A
     -> Tensor d '[n, n]          -- ^ x x' + A
-syr α x = ger α x x
+xTxScale α x = outerScale α x x
 
-gemm
+matMatScale
     :: forall d m o n. (SingI d, KnownNat m, KnownNat o, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, o]  -- ^ A
     -> Tensor d '[o, n]  -- ^ B
-    -> Maybe (Scalar d, Tensor d '[m, n])  -- ^ β, C
     -> Tensor d '[m, n]  -- ^ α A B + β C
-gemm α as (transp->bs) βcs = domWit @VS.Storable @d // domWit @Num @d // T_ $
-    case βcs of
-      Nothing      -> VS.concat $ map (\a -> getT_ $ gemv α bs a Nothing)
-                        (chunkMat as)
-      Just (β, cs) -> VS.concat $ zipWith (\a c -> getT_ $ gemv α bs a (Just (β, c)))
-                        (chunkMat as)
-                        (chunkMat cs)
+matMatScale α as (tr->bs) = domWit @VS.Storable @d // domWit @Num @d // T_ $
+      VS.concat $ map (getT_ . matVecScale α bs) (chunkMat as)
 
 chunkMat
     :: forall d m n. (SingI d, KnownNat m, KnownNat n, VS.Storable (Scalar d))
@@ -323,14 +308,12 @@ chunkMat (T_ xs) = flip map [0..m-1] $ \i -> coerce (VS.slice (i * n) n xs)
     m :: Int
     m = fromIntegral . fromSing $ sing @_ @m
 
--- | Can this be RULEs'd?
-syrk
+mTmScale
     :: (SingI d, KnownNat m, KnownNat n)
     => Scalar d     -- ^ α
     -> Tensor d '[m, n]  -- ^ A
-    -> Maybe (Scalar d, Tensor d '[m, m])  -- ^ β, C
     -> Tensor d '[m, m]  -- ^ α A A' + β C
-syrk α a = gemm α a (transp a)
+mTmScale α a = matMatScale α a (tr a)
 
 domWit
     :: forall c d. (SingI d, c Double, c (Complex Double))

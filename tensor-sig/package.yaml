@@ -36,6 +36,8 @@ library:
   - deepseq
   signatures:
   - Tensor.Core
+  exposed-modules:
+  - Tensor
 
 executables:
   tensor-tests-hmatrix:

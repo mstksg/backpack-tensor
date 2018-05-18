@@ -9,7 +9,7 @@ main :: IO ()
 main = do
     print test1
     print test2
-    print $ gemv 0.5 test1 test2 Nothing
+    print $ matVecScale 0.5 test1 test2
 
 test1 :: Tensor 'R '[5,3]
 test1 = gen sing $ \(i :< j :< Ø) -> fromIntegral i + fromIntegral j
